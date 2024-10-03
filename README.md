@@ -36,6 +36,7 @@ int main()
 ## 链接
 ### 超链接 [RM培训资料](https://docs.qq.com/sheet/DZUhrSEVsWmdqbEV0?tab=BB08J2)
 ### 正常链接 <https://docs.qq.com/sheet/DZUhrSEVsWmdqbEV0?tab=BB08J2>
+### 图片<img src="![image](https://github.com/user-attachments/assets/456e4e54-4c57-4e33-8736-b6e8fdd08baa)">
 ## 公式
 $$
 f(x)=\frac{1}{2}(x^3+y^3)+H(\theta)
