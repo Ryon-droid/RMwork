@@ -3,7 +3,7 @@
 #include <cmath>
 using namespace std;
 
-// ÅĞ¶ÏÊÇ·ñÊÇÖÊÊıµÄº¯Êı
+// åˆ¤æ–­æ˜¯å¦æ˜¯è´¨æ•°çš„å‡½æ•°
 bool isprime(int num) {
     if (num <= 1) return false;
     for (int i = 2; i <= sqrt(num); ++i) {
@@ -12,7 +12,7 @@ bool isprime(int num) {
     return true;
 }
 
-// ÑéÖ¤¸çµÂ°ÍºÕ²ÂÏë²¢Êä³ö½á¹û
+// éªŒè¯å“¥å¾·å·´èµ«çŒœæƒ³å¹¶è¾“å‡ºç»“æœ
 void goldbach(int N) {
     for (int i = 4; i <= N; i += 2) {
         bool found = false;
@@ -28,7 +28,7 @@ void goldbach(int N) {
 
 int main() {
     int N;
-    cin >> N;  // ÊäÈëÕıÅ¼Êı N
-    goldbach(N);  // ÑéÖ¤²¢Êä³ö½á¹û
+    cin >> N;  // è¾“å…¥æ­£å¶æ•° N
+    goldbach(N);  // éªŒè¯å¹¶è¾“å‡ºç»“æœ
     return 0;
 }
