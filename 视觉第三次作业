@@ -1,0 +1,123 @@
+class MyString
+{
+size_t len;
+    char* str = nullptr;
+public:
+    MyString(const char* s)
+    {
+        if (s == nullptr)
+            return;
+        len = strlen(s);
+        str = new char[len + 1];
+        strcpy(str, s);
+        str[strlen(s)] = '\0';
+ 
+    }
+    MyString()
+    {
+        len = 0;
+        str = nullptr;
+    }
+    ~MyString()
+    {
+        if (str)
+            delete[]str;
+    }
+    MyString(const MyString& mys)
+    {
+        if (mys.str == nullptr)
+            return;
+        else
+        {
+            len = strlen(mys.str);
+            str = new char[len + 1];
+            strcpy(str, mys.str);
+        }
+    }
+    friend ostream& operator<<(ostream& cout, const MyString& s)
+    {
+        if (s.str != nullptr)
+            cout << s.str;
+        return cout;
+    }
+    MyString& operator=(const MyString& mys)
+    {
+        if (mys.str == str)
+            return *this;
+        else
+        {
+            if (str)
+                delete[]str;
+            len = strlen(mys.str);
+            str = new char[len + 1];
+            strcpy(str, mys.str);
+        }
+        return *this;
+    }
+    MyString operator+(const MyString& mys)
+    {
+        if (mys.str == nullptr)
+            return *this;
+        MyString tempmys;
+ 
+        tempmys.len =len + strlen(mys.str);
+        tempmys.str = new char[tempmys.len + 1];
+        strcpy(tempmys.str, str);
+        strcat(tempmys.str, mys.str);
+        return tempmys;
+    }
+    MyString operator+(const char* s)
+    {
+        MyString mys(s);
+        return *this + mys;
+    }
+    friend MyString operator+(const char* s,  const MyString& rhs)
+    {
+        MyString mys(s);
+        return mys + rhs;
+    }
+    MyString& operator+=(const char* s)
+    {
+        MyString mys(s);
+        *this = *this + mys;
+        return *this;
+    } 
+    MyString operator()(int i, int j)
+    {
+        MyString mys;
+        mys.len = j;
+        char* temps = new char[j+1];
+        int start = 0;
+        for (start = 0; start < j; start++)
+            temps[start] = str[i + start];
+        temps[start] = 0;
+        mys.str = temps;
+        return mys;
+    }
+ 
+    int operator<(const MyString& rhs)
+    {
+        if (strcmp(str, rhs.str) < 0)
+            return true;
+        else
+            return false;
+    }
+    int operator==(const MyString& rhs)
+    {
+        if (strcmp(str, rhs.str) == 0)
+            return true;
+        else
+            return false;
+    }
+    int operator>(const MyString& rhs)
+    {
+        if (strcmp(str, rhs.str) > 0)
+            return true;
+        else
+            return false;
+    }
+    char& operator[](int i)
+    {
+        return str[i];
+    }
+}
