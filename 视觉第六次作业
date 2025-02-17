@@ -1,0 +1,57 @@
+#include <iostream>
+#include <opencv2/opencv.hpp>
+
+int main() {
+    // 打开摄像头
+    cv::VideoCapture cap(0);
+    if (!cap.isOpened()) {
+        std::cerr << "无法打开摄像头" << std::endl;
+        return -1;
+    }
+
+    // 定义蓝色在HSV中的范围
+    cv::Scalar blue_lower = cv::Scalar(100, 100, 100);
+    cv::Scalar blue_upper = cv::Scalar(130, 255, 255);
+
+    // 定义红色在HSV中的范围（红色在HSV中有两个不连续的范围，需要分别处理）
+    cv::Scalar red_lower1 = cv::Scalar(0, 100, 100);
+    cv::Scalar red_upper1 = cv::Scalar(10, 255, 255);
+    cv::Scalar red_lower2 = cv::Scalar(160, 100, 100);
+    cv::Scalar red_upper2 = cv::Scalar(180, 255, 255);
+
+    cv::Mat frame, hsv_frame, blue_mask, red_mask1, red_mask2, red_mask;
+    while (true) {
+        // 读取视频帧
+        cap >> frame;
+        if (frame.empty()) {
+            break;
+        }
+
+        // 转换为HSV颜色空间
+        cv::cvtColor(frame, hsv_frame, cv::COLOR_BGR2HSV);
+
+        // 创建蓝色掩码
+        cv::inRange(hsv_frame, blue_lower, blue_upper, blue_mask);
+
+        // 创建红色掩码（合并两个范围）
+        cv::inRange(hsv_frame, red_lower1, red_upper1, red_mask1);
+        cv::inRange(hsv_frame, red_lower2, red_upper2, red_mask2);
+        cv::bitwise_or(red_mask1, red_mask2, red_mask);
+
+        // 显示原始帧、蓝色掩码和红色掩码
+        cv::imshow("Original", frame);
+        cv::imshow("Blue Mask", blue_mask);
+        cv::imshow("Red Mask", red_mask);
+
+        // 按下'q'键退出循环
+        if (cv::waitKey(1) == 'q') {
+            break;
+        }
+    }
+
+    // 释放摄像头资源并关闭窗口
+    cap.release();
+    cv::destroyAllWindows();
+
+    return 0;
+}
