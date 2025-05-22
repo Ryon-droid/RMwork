@@ -1,0 +1,233 @@
+#include <iostream>
+#include <opencv2/opencv.hpp>
+#include <vector>
+#include <deque>
+#include <cmath>  
+
+using namespace std;
+using namespace cv;
+
+// 最小二乘法圆拟合函数声明
+int LeastSquaresCircleFitting(vector<Point2d>& m_Points, Point2d& Centroid, double& dRadius);
+
+// 颜色HSV范围定义（需根据实际视频校准）
+struct ColorRange {
+    Scalar lower;  // HSV下限
+    Scalar upper;  // HSV上限
+};
+
+// 预定义红色HSV范围
+vector<ColorRange> colorRanges = {
+    {Scalar(0, 120, 60),   Scalar(10, 255, 255)},   // 低红色范围
+    {Scalar(160, 120, 80), Scalar(180, 255, 255)}   // 高红色范围
+};
+
+// 滑动平均滤波器（平滑旋转矩形参数）
+struct RotatedRectSmoother {
+    deque<RotatedRect> history;
+    int windowSize = 5;  // 历史窗口大小
+
+    RotatedRect smooth(const RotatedRect& newRect) {
+        history.push_back(newRect);
+        if (history.size() > windowSize) history.pop_front();
+
+        Point2f avgCenter(0, 0);
+        float avgWidth = 0, avgHeight = 0, avgAngle = 0;
+        for (const auto& rect : history) {
+            avgCenter += rect.center;
+            avgWidth += rect.size.width;
+            avgHeight += rect.size.height;
+            avgAngle += rect.angle;
+        }
+        float count = static_cast<float>(history.size());
+        avgCenter /= count;
+        avgWidth /= count;
+        avgHeight /= count;
+        avgAngle /= count;
+
+        return RotatedRect(avgCenter, Size2f(avgWidth, avgHeight), avgAngle);
+    }
+};
+
+// 轨迹条全局变量（用于安全获取值）
+int g_minArea = 5900;          // 最小面积初始值
+int g_maxArea = 8000;          // 最大面积初始值
+int g_minAspectRatio = 80;     // 最小长宽比初始值（实际值=轨迹条值/100）
+int g_maxAspectRatio = 120;    // 最大长宽比初始值（实际值=轨迹条值/100）
+
+// 轨迹条回调函数
+void onTrackbarChange(int, void*) {}
+
+int main() {
+    // 1. 打开视频文件
+    VideoCapture video("第七次作业视频.mp4");
+    if (!video.isOpened()) {
+        cerr << "错误：视频文件打开失败！" << endl;
+        return -1;
+    }
+
+    // 2. 创建调试窗口（原始帧仅作为参考）
+    namedWindow("原始帧", WINDOW_NORMAL);
+    namedWindow("颜色掩码", WINDOW_NORMAL);
+    namedWindow("处理结果", WINDOW_NORMAL);  
+    resizeWindow("原始帧", 640, 480);
+    resizeWindow("颜色掩码", 640, 480);
+    resizeWindow("处理结果", 640, 480);
+
+    // 3. 初始化变量
+    Mat frame, hsvFrame, totalMask, processedFrame;  // processedFrame用于最终绘制
+    vector<Point2d> trackPoints;
+    RotatedRectSmoother rectSmoother;  // 旋转矩形平滑器
+
+    // 创建轨迹条
+    createTrackbar("最小面积", "处理结果", NULL, 10000, onTrackbarChange);
+    createTrackbar("最大面积", "处理结果", NULL, 10000, onTrackbarChange);
+    createTrackbar("最小长宽比x100", "处理结果", NULL, 200, onTrackbarChange);  
+    createTrackbar("最大长宽比x100", "处理结果", NULL, 200, onTrackbarChange); 
+    setTrackbarPos("最小面积", "处理结果", g_minArea);
+    setTrackbarPos("最大面积", "处理结果", g_maxArea);
+    setTrackbarPos("最小长宽比x100", "处理结果", g_minAspectRatio);  
+    setTrackbarPos("最大长宽比x100", "处理结果", g_maxAspectRatio);  
+
+    // 4. 逐帧处理视频
+    while (true) {
+        if (!video.read(frame)) break;  // 读取原始帧
+
+        // 5. 预处理（去噪+颜色转换）
+        Mat blurredFrame;
+        GaussianBlur(frame, blurredFrame, Size(5, 5), 1.5);  // 去噪后的原始帧副本
+        cvtColor(blurredFrame, hsvFrame, COLOR_BGR2HSV);    // 转换为HSV
+
+        // 6. 提取颜色掩码（红色区域）
+        totalMask = Mat::zeros(hsvFrame.size(), CV_8UC1);
+        for (const auto& range : colorRanges) {
+            Mat colorMask;
+            inRange(hsvFrame, range.lower, range.upper, colorMask);
+            threshold(colorMask, colorMask, 127, 255, THRESH_BINARY);  // 二值化
+            Mat kernel = getStructuringElement(MORPH_ELLIPSE, Size(10, 10));
+            morphologyEx(colorMask, colorMask, MORPH_CLOSE, kernel);  // 闭运算连接区域
+            totalMask |= colorMask;  // 合并两段红色掩码
+        }
+        imshow("颜色掩码", totalMask);  // 显示单通道掩码
+
+        // 7. 形态学优化（去噪+连接）
+        Mat kernelSmall = getStructuringElement(MORPH_ELLIPSE, Size(8, 8));
+        Mat kernelLarge = getStructuringElement(MORPH_ELLIPSE, Size(18, 18));
+        morphologyEx(totalMask, totalMask, MORPH_OPEN, kernelSmall);  // 去小噪点
+        morphologyEx(totalMask, totalMask, MORPH_CLOSE, kernelLarge);  // 连接大区域
+
+        // 8. 初始化处理结果图像（仅保留目标颜色区域）
+        processedFrame = Mat::zeros(frame.size(), frame.type());  // 三通道彩色图
+        frame.copyTo(processedFrame, totalMask);  // 仅保留红色区域
+
+        // 9. 查找轮廓（基于单通道掩码totalMask）
+        vector<vector<Point>> contours;
+        vector<Vec4i> hierarchy;
+        findContours(totalMask, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE);
+
+        // 10. 遍历轮廓并在处理结果图像上绘制
+        for (size_t i = 0; i < contours.size(); i++) {
+            double area = contourArea(contours[i]);
+            
+            // 获取当前轨迹条值
+            g_minArea = getTrackbarPos("最小面积", "处理结果");
+            g_maxArea = getTrackbarPos("最大面积", "处理结果");
+            g_minAspectRatio = getTrackbarPos("最小长宽比x100", "处理结果");  
+            g_maxAspectRatio = getTrackbarPos("最大长宽比x100", "处理结果");  
+
+            // 面积过滤
+            if (area < g_minArea || area > g_maxArea) continue; 
+
+            // 获取最小外接旋转矩形
+            RotatedRect minRect = minAreaRect(contours[i]);
+            
+            // 计算长宽比（统一为长边/短边）
+            float width = minRect.size.width;
+            float height = minRect.size.height;
+            float aspectRatio = max(width, height) / min(width, height);
+            float minAR = 1.0;  
+            float maxAR = 4.0;
+            
+            // 长宽比过滤（新增）
+            if (aspectRatio < minAR || aspectRatio > maxAR) continue;
+
+            Point2f rectPoints[4];
+            minRect.points(rectPoints);
+
+            // 在处理结果图像上绘制矩形和中心点（绿色矩形+蓝色圆心）
+            circle(processedFrame, minRect.center, 10, Scalar(255, 0, 0), -1);  // 中心点（蓝色）
+            for (int j = 0; j < 4; j++) {
+                line(processedFrame, rectPoints[j], rectPoints[(j + 1) % 4], Scalar(0, 255, 0), 5);  // 矩形边（绿色）
+            }
+
+            // 存储中心点用于圆拟合
+            trackPoints.push_back(minRect.center);
+
+            // 圆拟合（至少3个点）
+            if (trackPoints.size() >= 3) {
+                Point2d circleCenter;
+                double circleRadius;
+                if (LeastSquaresCircleFitting(trackPoints, circleCenter, circleRadius) == 0) {
+                    // 在处理结果图像上绘制拟合圆（红色）
+                    circle(processedFrame, circleCenter, (int)circleRadius, Scalar(0, 0, 255), 2);  // 圆（红色）
+                    circle(processedFrame, circleCenter, 10, Scalar(255, 0, 0), -1);  // 圆心（蓝色）
+                }
+            }
+        }
+
+        // 显示原始帧和处理结果
+        imshow("原始帧", frame);
+        imshow("处理结果", processedFrame);  
+
+        int key = waitKey(100);  
+        if (key == 27) break;  // 按ESC键退出
+    }
+
+    video.release();
+    destroyAllWindows();
+    return 0;
+}
+
+// 最小二乘法圆拟合函数
+int LeastSquaresCircleFitting(vector<Point2d>& m_Points, Point2d& Centroid, double& dRadius) {
+    if (m_Points.size() < 3) return 1; // 至少需要3个点
+
+    int n = (int)m_Points.size();
+    double sumX = 0, sumY = 0;
+    double sumX2 = 0, sumY2 = 0;
+    double sumX3 = 0, sumY3 = 0;
+    double sumXY = 0, sumX1Y2 = 0, sumX2Y1 = 0;
+
+    for (const auto& p : m_Points) {
+        double x = p.x, y = p.y;
+        sumX += x;
+        sumY += y;
+        sumX2 += x * x;
+        sumY2 += y * y;
+        sumX3 += x * x * x;
+        sumY3 += y * y * y;
+        sumXY += x * y;
+        sumX1Y2 += x * y * y;
+        sumX2Y1 += x * x * y;
+    }
+
+    double C = n * sumX2 - sumX * sumX;
+    double D = n * sumXY - sumX * sumY;
+    double E = n * (sumX3 + sumX1Y2) - (sumX2 + sumY2) * sumX;
+    double G = n * sumY2 - sumY * sumY;
+    double H = n * (sumX2Y1 + sumY3) - (sumX2 + sumY2) * sumY;
+    double denominator = C * G - D * D;
+
+    if (fabs(denominator) < 1e-8) return 1; // 避免除零错误
+
+    double a = (H * D - E * G) / denominator;
+    double b = (H * C - E * D) / (-denominator);
+    double c = -(a * sumX + b * sumY + sumX2 + sumY2) / n;
+
+    Centroid.x = a / (-2);
+    Centroid.y = b / (-2);
+    dRadius = sqrt(a * a + b * b - 4 * c) / 2;
+
+    return 0;
+}
+    
