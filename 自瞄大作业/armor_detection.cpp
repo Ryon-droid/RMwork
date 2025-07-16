@@ -24,7 +24,7 @@ struct ArmorParam {
     float light_max_y_diff_ratio = 0.6f;       // 最大Y轴差比例
     float light_min_x_diff_ratio = 0.15f;       // 最小X轴差比例
     
-    ColorType enemy_color = RED;                // 敌方灯带颜色
+    ColorType enemy_color = BLUE;                // 敌方灯带颜色
     
     // 二值化卷积核大小参数
     int morph_erode_size = 2;                   // 腐蚀操作卷积核大小
@@ -396,8 +396,8 @@ private:
 // 主函数
 int main() {
     // 配置参数
-    string videoPath = "armor_videored.mp4";       // 测试视频路径
-    ColorType enemyColor = RED;                   // 敌方灯带颜色（RED/BLUE）
+    string videoPath = "armor_videoblue.mp4";       // 测试视频路径
+    ColorType enemyColor = BLUE;                   // 敌方灯带颜色（RED/BLUE）
 
     // 动态设置模板路径
     string templatePath;
